@@ -145,13 +145,13 @@ if selected_fire:
             },
             "mapStyle": {
                 "styleType": "dark-matter",
-                "mapStyles": {
-                    "Satellite Streets": {
-                        "accessToken": MY_TOKEN,
-                        "url": "mapbox://styles/mapbox/satellite-streets-v12",
-                        "label": "Mapbox Satellite Streets",
-                    }
-                },
+                # "mapStyles": {
+                #     "Satellite Streets": {
+                #         "accessToken": MY_TOKEN,
+                #         "url": "mapbox://styles/mapbox/satellite-streets-v12",
+                #         "label": "Mapbox Satellite Streets",
+                #     }
+                # },
             },
         },
     }
