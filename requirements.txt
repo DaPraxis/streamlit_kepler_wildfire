@@ -3,3 +3,4 @@ streamlit-kepler-component
 pandas
 geopandas
 rasterio
+plotly
