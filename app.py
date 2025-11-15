@@ -39,9 +39,19 @@ fire_files = sorted(fire_files)
 
 selected_fire = st.sidebar.selectbox("Select Fire ID", fire_files)
 
+# Meta data for day fire
+
+meta_data = ""
+
+placeholder = st.empty()
+st.dataframe(weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])].drop(['fire_id', 'year', 'jd'],axis=1))
+
+
+
 col_map, col_viz = st.columns([1.5, 1]) 
 
 if selected_fire:
+
     # ---------------------------
     # Kepler fire polygons (UNCHANGED)
     # ---------------------------
@@ -61,23 +71,31 @@ if selected_fire:
     else:
         jd_min, jd_max, jd_range = 0, 1, 1
 
+    placeholder.markdown(f"""
+        **Fire ID:** `{selected_fire}`  
+        **JD Range:** {jd_min} → {jd_max} ({jd_range} days)  
+        **Weather Code:** Checkout [WMO weather interpretation codes](https://www.nodc.noaa.gov/archive/arc0021/0002199/1.1/data/0-data/HTML/WMO-CODE/WMO4677.HTM) for details
+        """)
+
     # color scale granularity
     color_scale_type = "linear" if jd_range > 10 else "quantize"
 
-    # ✅ use Kepler's built-in ColorBrewer palette (no manual colors)
     color_range = {
-        "name": "ColorBrewer OrRd-6",
+        "name": "Custom40_YlOrRd",
         "type": "sequential",
-        "category": "ColorBrewer",
+        "category": "Custom",
         "colors": [
-            "#fef0d9",
-            "#fdd49e",
-            "#fdbb84",
-            "#fc8d59",
-            "#e34a33",
-            "#b30000",
-        ],
+            "#ffffcc","#fffac2","#fff5b8","#fff0ae","#ffeaa4",
+            "#ffe59a","#ffe090","#ffdb86","#ffd67d","#ffd173",
+            "#ffcc69","#fec75f","#fbc255","#f8bd4c","#f5b842",
+            "#f2b339","#efae30","#eba926","#e8a41d","#e59f14",
+            "#e29a0b","#df9500","#db8f00","#d88900","#d58300",
+            "#d27d00","#cf7700","#cc7100","#c96b00","#c66500",
+            "#c35f00","#c05900","#bd5300","#ba4d00","#b74700",
+            "#b44100","#b13b00","#ae3500","#ab2f00","#a82900"
+        ]
     }
+
 
     st.session_state.datasets = [fire_gdf]
 
@@ -206,7 +224,7 @@ if selected_fire:
                 st.info(f"{label} file not found for this fire.")
                 return None
             try:
-                return np.load(path).transpose()
+                return np.load(path)[::-1, :]
             except Exception as e:
                 st.warning(f"Failed to load {label}: {e}")
                 return None
@@ -252,10 +270,9 @@ if selected_fire:
                 )
                 fig.update_layout(
                     height=500,
-                    width=250,
-                    margin=dict(l=20, r=20, t=30, b=0),
+                    margin=dict(l=0, r=0, t=30, b=0),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
         # ---------------- Slope 2D ----------------
         with tab3:
@@ -274,7 +291,7 @@ if selected_fire:
                     height=500,
                     margin=dict(l=0, r=0, t=30, b=0),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
         # ---------------- Aspect 2D ----------------
         with tab4:
@@ -293,7 +310,7 @@ if selected_fire:
                     height=500,
                     margin=dict(l=0, r=0, t=30, b=0),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
         # ---------------- DEM 2D ----------------
         with tab5:
@@ -315,11 +332,3 @@ if selected_fire:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("DEM not available for this fire.")
-    st.markdown(
-        f"""
-    **Fire ID:** `{selected_fire}`  
-    **JD Range:** {jd_min} → {jd_max} ({jd_range} days)  
-    **Weather Code:** Checkout [WMO weather interpretation codes](https://www.nodc.noaa.gov/archive/arc0021/0002199/1.1/data/0-data/HTML/WMO-CODE/WMO4677.HTM) for details
-    """
-    )
-    st.dataframe(weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])].drop(['fire_id', 'year', 'jd'],axis=1))
