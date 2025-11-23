@@ -9,11 +9,115 @@ from shapely.geometry import mapping
 import plotly.graph_objects as go
 import rasterio
 import pandas as pd
-
+import joblib
+from graphviz import Digraph
 # Mapbox
 MY_TOKEN = "pk.eyJ1IjoibWF4ZG9taW5pYyIsImEiOiJjbWhyejVvY2owMmNsMmtwdmEwNHd3YjRmIn0.4mJfybYpE2oWZc7iy1hiHA"
 
 st.set_page_config(page_title="Wildfire Progression Viewer", layout="wide")
+MODEL_PATH = "model/gaussian_hmm_model.pkl"
+SCALER_PATH = "model/scaler.pkl"
+
+# -------------------------
+# Load model
+# -------------------------
+@st.cache_resource
+def load_hmm_model():
+    return joblib.load(MODEL_PATH)
+
+@st.cache_resource
+def load_scaler():
+    return joblib.load(SCALER_PATH)
+
+model = load_hmm_model()
+scaler = load_scaler()
+
+# Extract HMM info
+A = model.transmat_
+pi = model.startprob_
+means = model.means_
+n_states = model.n_components
+
+# OPTIONAL: Give readable state names
+state_names = [
+    "Dormant",
+    "Terrain-Driven Growth",
+    "Weather-Collapse (Heavy Rain + High Wind)",
+    "Cool-Rain Suppressed",
+    "Heat-Driven Growth",
+    "Chaotic Collapse (Wind + Rain Distortion)"
+][:n_states]
+
+feature_names = ['slope_mean', 'slope_median', 'slope_circular', 'aspect_mean',
+       'aspect_median', 'aspect_circular', 'hillshade_mean',
+       'hillshade_median', 'delta_area', 'delta_perimeter', 'delta_cx',
+       'delta_cy', 'centroid_shift_m', 'geom_lat', 'geom_lon', 'weather_lat',
+       'weather_lon', 'weather_code', 'temperature_2m_max',
+       'temperature_2m_min', 'temperature_2m_mean', 'precipitation_sum',
+       'rain_sum', 'snowfall_sum', 'wind_speed_10m_max', 'wind_gusts_10m_max',
+       'wind_direction_10m_dominant', 'shortwave_radiation_sum',
+       'et0_fao_evapotranspiration']
+
+# -------------------------
+# Build GraphViz HMM Diagram
+# -------------------------
+def build_hmm_graph(model, state_names=None, feature_names=None, max_features=3):
+
+    g = Digraph("Wildfire_HMM", format="png")
+    g.attr(rankdir="LR", size="12,6")
+
+    # Start Node
+    g.node("Start", shape="doublecircle", fontsize="14", style="bold")
+
+    A = model.transmat_
+    pi = model.startprob_
+    means = model.means_
+    n_states = model.n_components
+
+    # -------------------------
+    # Hidden State Nodes
+    # -------------------------
+    for i in range(n_states):
+        label = state_names[i] if state_names else f"State {i}"
+
+        # show top absolute-mean features
+        if feature_names is not None:
+            idx = np.argsort(np.abs(means[i]))[::-1][:max_features]
+            emissions_text = "\\n".join(
+                f"{feature_names[j]}: {means[i][j]:.1f}" for j in idx
+            )
+        else:
+            # default: show 3 highest mean values
+            idx = np.argsort(np.abs(means[i]))[::-1][:max_features]
+            emissions_text = "\\n".join(
+                f"μ[{j}] = {means[i][j]:.1f}" for j in idx
+            )
+
+        g.node(
+            f"S{i}",
+            label=f"{label}\n---\n{emissions_text}",
+            shape="circle",
+            fontsize="12"
+        )
+
+        # Start transition
+        g.edge("Start", f"S{i}", label=f"{pi[i]:.2f}", fontsize="10")
+
+    # -------------------------
+    # Transitions
+    # -------------------------
+    for i in range(n_states):
+        for j in range(n_states):
+            if A[i, j] > 0.05:  # show only meaningful transitions
+                thickness = str(1 + A[i, j] * 5)
+                g.edge(
+                    f"S{i}", f"S{j}",
+                    label=f"{A[i, j]:.2f}",
+                    penwidth=thickness,
+                    fontsize="10"
+                )
+
+    return g
 
 if "datasets" not in st.session_state:
     st.session_state.datasets = []
@@ -28,7 +132,7 @@ select_yyyy = st.sidebar.selectbox("Select the Year", yyyy)
 weather_dfs = {}
 for yy in yyyy:
     fd = f"data/{yy}"
-    weather_dfs[yy] = pd.read_csv(os.path.join(fd, f"fire_daily_weather_{yy}.csv"))
+    weather_dfs[yy] = pd.read_csv(os.path.join(fd, f"fire_hmm_ready_{yy}.csv"))
 
 FIRE_DIR = f"data/{select_yyyy}"
 fire_files = []
@@ -44,11 +148,87 @@ selected_fire = st.sidebar.selectbox("Select Fire ID", fire_files)
 meta_data = ""
 
 placeholder = st.empty()
-st.dataframe(weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])].drop(['fire_id', 'year', 'jd'],axis=1))
+data_df = weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])].drop(['fire_id', 'year', 'jd'],axis=1)
+st.dataframe(data_df)
 
+data_df_scl = scaler.transform(data_df[feature_names].values)
+logprob, decoded_states = model.decode(data_df_scl)
+print(logprob)
+print(decoded_states)
+decoded_state_names = [state_names[s] for s in decoded_states]
 
+tab_1, tab_2, tab_3 = st.tabs(['🔎Wildfire Data Exploration', '📍Hidden Markov Model', '📖Fire Interpretation'])
+with tab_1: 
+    col_map, col_viz = st.columns([1.5, 1]) 
+with tab_2:
+    st.markdown('''
+                | **State**                                               | **Spread Intensity (ΔArea/ΔPerimeter)** | **Wind Influence** | **Temperature**                 | **Moisture / Rain** | **Terrain Influence (Slope/Aspect)** | **Interpretation (Corrected)**                                                 |
+| ------------------------------------------------------- | --------------------------------------- | ------------------ | ------------------------------- | ------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
+| **State 1 — Dormant / Mildly Suppressed**               | 🔵 *Small negative spread*              | Low–Moderate       | Moderate                        | Low–Moderate rain   | Very weak                            | Fire is slowing or stalling; light suppression but not collapsing.             |
+| **State 2 — Terrain-Driven Growth**                     | 🟠 *Moderate positive spread*           | Low                | Moderate                        | No rain             | **Strongest slope effect**           | Fire spreads due to terrain channels (steep slopes); predictable forward line. |
+| **State 3 — Weather-Collapse (Heavy Rain + High Wind)** | 🔴 **Very large negative spread**       | **Highest winds**  | Moderate                        | **Highest rain**    | Very low slope                       | Fire boundary collapses due to rainfall + wind; strong suppression.            |
+| **State 4 — Cool-Rain Suppressed**                      | 🔵 *Small–moderate negative spread*     | Moderate           | **Lowest temperatures**         | Moderate rain       | Medium slope                         | Fire cooling + moisture reduces intensity; slower but systematic retreat.      |
+| **State 5 — Heat-Driven Growth**                        | 🟢 **Very large positive spread**       | Moderate           | **High temperature & low rain** | None                | Low slope                            | Fast expansion driven by heat/dryness, not wind or terrain.                    |
+| **State 6 — Chaotic Collapse (Wind + Rain Distortion)** | 🔴 **Largest negative spread of all**   | High               | Moderate                        | Moderate rain       | Medium slope                         | Boundary collapses violently; wind distorts shape (very high centroid shift).  |
+                ''')
+    max_features = st.slider("Number of Emission Features", min_value=3, max_value=len(feature_names), value=5)
+    graph = build_hmm_graph(model, state_names=state_names, feature_names=feature_names, max_features=max_features)
+    st.graphviz_chart(graph)
+with tab_3:
+    st.subheader("🔥 State Timeline Across Days")
 
-col_map, col_viz = st.columns([1.5, 1]) 
+    jd_values = weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])]['jd'].values
+
+    fig_timeline = go.Figure()
+
+    fig_timeline.add_trace(
+        go.Scatter(
+            x=jd_values,
+            y=decoded_states,
+            mode='lines+markers',
+            line=dict(width=3),
+            marker=dict(size=8),
+            name="State"
+        )
+    )
+
+    fig_timeline.update_layout(
+        height=300,
+        xaxis_title="Julian Day (JD)",
+        yaxis_title="State",
+        yaxis=dict(
+            tickmode="array",
+            tickvals=list(range(n_states)),
+            ticktext=state_names
+        ),
+        margin=dict(l=40, r=20, t=40, b=40)
+    )
+
+    st.plotly_chart(fig_timeline, use_container_width=True)
+
+    st.subheader("🔁 State Transition Graph for This Fire")
+
+    # compute transitions
+    T = np.zeros((n_states, n_states))
+    for i in range(len(decoded_states) - 1):
+        a = decoded_states[i]
+        b = decoded_states[i+1]
+        T[a, b] += 1
+
+    # build graphviz circular layout
+    g2 = Digraph("State_Transitions", format="png")
+    g2.attr(rankdir="LR", size="10,5")
+
+    for i in range(n_states):
+        g2.node(f"S{i}", label=state_names[i], shape="circle")
+
+    for i in range(n_states):
+        for j in range(n_states):
+            if T[i,j] > 0:
+                g2.edge(f"S{i}", f"S{j}", label=str(int(T[i,j])), penwidth=str(1+T[i,j]/2))
+
+    st.graphviz_chart(g2)
+
 
 if selected_fire:
 

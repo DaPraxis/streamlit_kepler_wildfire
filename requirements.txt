@@ -4,3 +4,4 @@ pandas
 geopandas
 rasterio
 plotly
+hmmlearn
