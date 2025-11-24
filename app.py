@@ -42,9 +42,10 @@ n_states = model.n_components
 state_names = [
     "Mildly Suppressed / Stable",
     "Rain-Driven Collapse",
-    "Chaotic Breakdown (Heavy Rain + High Wind)",
+    "Heat-Driven Extreme Growth",
     "Flat-Terrain Moderate Growth",
-    "Heat-Driven Extreme Growth"
+    "Chaotic Breakdown (Heavy Rain + High Wind)"
+
 ][:n_states]
 
 feature_names = ['slope_mean', 'slope_median', 'slope_circular', 'aspect_mean',
@@ -147,7 +148,7 @@ meta_data = ""
 
 placeholder = st.empty()
 data_df = weather_dfs[select_yyyy][weather_dfs[select_yyyy]['fire_id']==int(selected_fire.split('_')[1])].drop(['fire_id', 'year', 'jd'],axis=1)
-st.dataframe(data_df)
+st.dataframe(data_df[feature_names])
 
 data_df_scl = scaler.transform(data_df[feature_names].values)
 logprob, decoded_states = model.decode(data_df_scl)
