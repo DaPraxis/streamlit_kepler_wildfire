@@ -40,19 +40,17 @@ n_states = model.n_components
 
 # OPTIONAL: Give readable state names
 state_names = [
-    "Dormant",
-    "Terrain-Driven Growth",
-    "Weather-Collapse (Heavy Rain + High Wind)",
-    "Cool-Rain Suppressed",
-    "Heat-Driven Growth",
-    "Chaotic Collapse (Wind + Rain Distortion)"
+    "Mildly Suppressed / Stable",
+    "Rain-Driven Collapse",
+    "Chaotic Breakdown (Heavy Rain + High Wind)",
+    "Flat-Terrain Moderate Growth",
+    "Heat-Driven Extreme Growth"
 ][:n_states]
 
 feature_names = ['slope_mean', 'slope_median', 'slope_circular', 'aspect_mean',
        'aspect_median', 'aspect_circular', 'hillshade_mean',
        'hillshade_median', 'delta_area', 'delta_perimeter', 'delta_cx',
-       'delta_cy', 'centroid_shift_m', 'geom_lat', 'geom_lon', 'weather_lat',
-       'weather_lon', 'weather_code', 'temperature_2m_max',
+       'delta_cy', 'centroid_shift_m', 'temperature_2m_max',
        'temperature_2m_min', 'temperature_2m_mean', 'precipitation_sum',
        'rain_sum', 'snowfall_sum', 'wind_speed_10m_max', 'wind_gusts_10m_max',
        'wind_direction_10m_dominant', 'shortwave_radiation_sum',
@@ -162,14 +160,13 @@ with tab_1:
     col_map, col_viz = st.columns([1.5, 1]) 
 with tab_2:
     st.markdown('''
-                | **State**                                               | **Spread Intensity (ΔArea/ΔPerimeter)** | **Wind Influence** | **Temperature**                 | **Moisture / Rain** | **Terrain Influence (Slope/Aspect)** | **Interpretation (Corrected)**                                                 |
-| ------------------------------------------------------- | --------------------------------------- | ------------------ | ------------------------------- | ------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
-| **State 1 — Dormant / Mildly Suppressed**               | 🔵 *Small negative spread*              | Low–Moderate       | Moderate                        | Low–Moderate rain   | Very weak                            | Fire is slowing or stalling; light suppression but not collapsing.             |
-| **State 2 — Terrain-Driven Growth**                     | 🟠 *Moderate positive spread*           | Low                | Moderate                        | No rain             | **Strongest slope effect**           | Fire spreads due to terrain channels (steep slopes); predictable forward line. |
-| **State 3 — Weather-Collapse (Heavy Rain + High Wind)** | 🔴 **Very large negative spread**       | **Highest winds**  | Moderate                        | **Highest rain**    | Very low slope                       | Fire boundary collapses due to rainfall + wind; strong suppression.            |
-| **State 4 — Cool-Rain Suppressed**                      | 🔵 *Small–moderate negative spread*     | Moderate           | **Lowest temperatures**         | Moderate rain       | Medium slope                         | Fire cooling + moisture reduces intensity; slower but systematic retreat.      |
-| **State 5 — Heat-Driven Growth**                        | 🟢 **Very large positive spread**       | Moderate           | **High temperature & low rain** | None                | Low slope                            | Fast expansion driven by heat/dryness, not wind or terrain.                    |
-| **State 6 — Chaotic Collapse (Wind + Rain Distortion)** | 🔴 **Largest negative spread of all**   | High               | Moderate                        | Moderate rain       | Medium slope                         | Boundary collapses violently; wind distorts shape (very high centroid shift).  |
+                | **State**                                                | **Spread Intensity (ΔArea/ΔPerimeter)** | **Wind Influence** | **Temperature**  | **Moisture / Rain** | **Terrain Influence (Slope/Aspect)** | **Interpretation (Corrected)**                                                         |
+| -------------------------------------------------------- | --------------------------------------- | ------------------ | ---------------- | ------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| **State 1 — Mildly Suppressed / Stable**                 | 🔵 *Small negative spread*              | Low–Moderate       | Moderate         | Low–Moderate        | **Moderate slope but stable**        | Fire is slowing but not collapsing; light suppression, stable boundary.                |
+| **State 2 — Rain-Driven Collapse**                       | 🔵 **Large negative spread**            | Low–Moderate       | Moderate         | **Moderate rain**   | Moderate slope                       | Fire boundary collapses primarily due to moisture; moderate centroid drift.            |
+| **State 3 — Chaotic Breakdown (Heavy Rain + High Wind)** | 🔴 **Extremely large negative spread**  | **Highest winds**  | Moderate         | **Highest rain**    | **Flattest terrain**                 | Violent fire collapse; very large centroid movement; influenced by wind + rainfall.    |
+| **State 4 — Flat-Terrain Moderate Growth**               | 🟠 *Moderate positive spread*           | Moderate           | Moderate         | Low                 | **Very low slope**                   | Fire spreads steadily on flat terrain; not wind-dominated, not heat-dominated.         |
+| **State 5 — Heat-Driven Extreme Growth**                 | 🟢 **Very large positive spread**       | Low–Moderate       | **Highest temp** | **No rain**         | Low slope                            | Rapid expansion due to hot, dry conditions; energy-driven, not terrain or wind-driven. |
                 ''')
     max_features = st.slider("Number of Emission Features", min_value=3, max_value=len(feature_names), value=5)
     graph = build_hmm_graph(model, state_names=state_names, feature_names=feature_names, max_features=max_features)
